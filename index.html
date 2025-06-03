@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Free AR Movie Scanner</title>
+    
+    <!-- AR.js + A-Frame (100% Free) -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar-nft.js"></script>
+    
+    <link rel="stylesheet" href="css/styles.css">
+
+</head>
+<body>
+    <!-- A-Frame AR Scene -->
+    <a-scene
+        vr-mode-ui="enabled: false"
+        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false; sourceWidth:1280; sourceHeight:960; displayWidth: 1280; displayHeight: 960;"
+        renderer="logarithmicDepthBuffer: true; colorManagement: true; alpha: true;"
+        embedded
+        gesture-detector
+        id="ar-scene"
+        style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;"
+    >
+        <!-- Assets -->
+        <a-assets>
+            <!-- Placeholder for movie posters if needed -->
+        </a-assets>
+
+        <!-- Lights -->
+        <a-light type="ambient" color="#ffffff" intensity="0.4"></a-light>
+        <a-light type="directional" position="0 5 5" color="#ffffff" intensity="0.8"></a-light>
+
+        <!-- AR Camera with proper passthrough -->
+        <a-camera 
+            id="ar-camera"
+            camera="active: true"
+            wasd-controls="enabled: false"
+            look-controls="enabled: true"
+            cursor="rayOrigin: mouse"
+        ></a-camera>
+    </a-scene>
+
+    <!-- UI Overlay -->
+    <div class="ar-ui-overlay">
+        <!-- Header -->
+        <div class="ar-header">
+            <div class="ar-logo">FREE AR MOVIE SCANNER</div>
+            <div class="ar-status" id="ar-status">Initializing...</div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="scan-instruction" id="scan-instruction">
+            <h3>🎬 AR Movie Scanner</h3>
+            <p>Point your camera at a movie poster</p>
+            <p>Tap anywhere on the poster to scan</p>
+            <p>Movie info will appear in AR space!</p>
+        </div>
+
+        <!-- Controls -->
+        <div class="ar-controls">
+            <button class="ar-btn" id="start-ar-btn">🚀 Start AR</button>
+            <button class="ar-btn" id="clear-markers-btn" style="display: none;">🧹 Clear All</button>
+        </div>
+
+        <!-- Loading -->
+        <div class="loading-overlay" id="loading-overlay">
+            <div class="loading-content">
+                <div class="loading-spinner"></div>
+                <div>Scanning poster...</div>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div class="error-message" id="error-message"></div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

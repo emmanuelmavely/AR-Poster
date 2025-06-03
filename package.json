@@ -1,0 +1,19 @@
+{
+  "name": "v3-webar-movie-scanner",
+  "version": "3.0.0",
+  "description": "Premium WebAR Movie Scanner",
+  "type": "module",
+  "main": "index.html",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "@google-cloud/vision": "^3.1.4",
+    "@tensorflow/tfjs": "^4.10.0",
+    "tesseract.js": "^4.1.1"
+  }
+}
