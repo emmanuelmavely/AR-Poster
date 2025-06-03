@@ -45,3 +45,4 @@ temp/
 
 # Ignore credential files
 *credentials*.json
+google-vision-credentials.json
