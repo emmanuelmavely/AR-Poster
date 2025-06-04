@@ -1,84 +1,109 @@
-// src/services/VisionService.js - Updated to use Multi-OCR
-import { MultiOCRService } from './MultiOCRService.js';
-
-export class VisionService {
-    constructor() {
-        this.multiOCR = new MultiOCRService();
-        this.isInitialized = false;
-    }
-
-    async init() {
-        console.log('👁️ Initializing Vision Service with Multi-OCR...');
-        try {
-            console.log('🔄 Initializing Multi-OCR component...');
-            await this.multiOCR.init();
-            this.isInitialized = true;
-            console.log('✅ Multi-OCR Vision Service ready');
-        } catch (error) {
-            console.error('❌ Failed to initialize Multi-OCR:', error);
-            console.error('❌ Multi-OCR init error stack:', error.stack);
-            console.log('⚠️ Will use fallback single Vision API only');
-            this.isInitialized = false;
-        }
-    }
-
-    async extractText(canvas) {
-        console.log('👁️ VisionService.extractText called');
-        
-        if (!this.isInitialized) {
-            console.warn('⚠️ Multi-OCR not initialized, using fallback single Vision API');
-            return this.fallbackToSingleVision(canvas);
-        }
-
-        try {
-            console.log('🚀 Starting Multi-OCR text extraction...');
-            const result = await this.multiOCR.extractTextMultiOCR(canvas);
-            console.log('📝 Multi-OCR completed, result:', result);
-            
-            if (result) {
-                console.log(`✅ Multi-OCR success: "${result}"`);
-                return result;
-            } else {
-                console.log('⚠️ Multi-OCR returned null, falling back to single Vision API');
-                return this.fallbackToSingleVision(canvas);
-            }
-        } catch (error) {
-            console.error('❌ Multi-OCR failed with error:', error);
-            console.error('❌ Multi-OCR error stack:', error.stack);
-            console.log('🔄 Falling back to single Vision API...');
-            return this.fallbackToSingleVision(canvas);
-        }
-    }
-
-    async fallbackToSingleVision(canvas) {
-        try {
-            console.log('🔄 Using fallback single Vision API...');
-            const imageBase64 = canvas.toDataURL('image/png').split(',')[1];
-            
-            const response = await fetch('/api/vision', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image: imageBase64 })
-            });
-
-            const result = await response.json();
-            
-            if (result.success && result.text) {
-                console.log(`✅ Fallback Vision result: "${result.text}"`);
-                return result.text;
-            } else {
-                console.log('❌ Vision API returned no text');
-                return null;
-            }
-        } catch (error) {
-            console.error('❌ Fallback Vision API failed:', error);
-            return null;
-        }
-    }
-
-    async cleanup() {
-        if (this.multiOCR) {
-            await this.multiOCR.cleanup();
-        }
-    }
+// Simplified Vision Service - Direct Google Vision API integration  
+export class VisionService {  
+    constructor() {  
+        this.isInitialized = false;  
+        this.retryCount = 0;  
+        this.maxRetries = 3;  
+    }  
+  
+    async init() {  
+        console.log('👁️ Initializing Vision Service...');  
+        try {  
+            // Test Vision API connectivity  
+            const testResponse = await fetch('/api/test-vision');  
+            const testResult = await testResponse.json();  
+              
+            if (!testResult.visionConfigured) {  
+                throw new Error('Google Vision API credentials not configured');  
+            }  
+              
+            this.isInitialized = true;  
+            console.log('✅ Vision Service initialized successfully');  
+            return true;  
+        } catch (error) {  
+            console.error('❌ Vision Service initialization failed:', error);  
+            this.isInitialized = false;  
+            throw new Error(`Vision API setup error: ${error.message}`);  
+        }  
+    }  
+  
+    async extractText(canvas) {  
+        if (!this.isInitialized) {  
+            throw new Error('Vision Service not initialized. Call init() first.');  
+        }  
+  
+        try {  
+            console.log('👁️ Starting text extraction...');  
+            const imageBase64 = canvas.toDataURL('image/png').split(',')[1];  
+              
+            const response = await this.callVisionAPI(imageBase64);  
+              
+            if (response && response.text) {  
+                console.log(`✅ Text extracted: "${response.text}"`);  
+                this.retryCount = 0; // Reset on success  
+                return response.text;  
+            } else {  
+                return this.handleNoTextDetected();  
+            }  
+        } catch (error) {  
+            return this.handleExtractionError(error, canvas);  
+        }  
+    }  
+  
+    async callVisionAPI(imageBase64) {  
+        const response = await fetch('/api/vision', {  
+            method: 'POST',  
+            headers: { 'Content-Type': 'application/json' },  
+            body: JSON.stringify({ image: imageBase64 })  
+        });  
+  
+        if (!response.ok) {  
+            throw new Error(`Vision API returned ${response.status}: ${response.statusText}`);  
+        }  
+  
+        return await response.json();  
+    }  
+  
+    handleNoTextDetected() {  
+        const suggestions = [  
+            "Move closer to the poster",  
+            "Ensure good lighting conditions",   
+            "Hold camera steady",  
+            "Try a different angle",  
+            "Make sure text is clearly visible"  
+        ];  
+          
+        const randomSuggestion = suggestions[Math.floor(Math.random() * suggestions.length)];  
+        throw new Error(`No text detected. Try: ${randomSuggestion}`);  
+    }  
+  
+    async handleExtractionError(error, canvas) {  
+        console.error('❌ Vision API error:', error);  
+          
+        if (this.retryCount < this.maxRetries) {  
+            this.retryCount++;  
+            console.log(`🔄 Retrying... (${this.retryCount}/${this.maxRetries})`);  
+            await new Promise(resolve => setTimeout(resolve, 1000 * this.retryCount));  
+            return this.extractText(canvas);  
+        }  
+          
+        this.retryCount = 0;  
+        throw new Error(`Vision API failed after ${this.maxRetries} attempts: ${error.message}`);  
+    }  
+  
+    getStatus() {  
+        return {  
+            initialized: this.isInitialized,  
+            service: 'Google Vision API',  
+            retryCount: this.retryCount  
+        };  
+    }  
+  
+    // Cleanup method for compatibility  
+    async cleanup() {  
+        console.log('🧹 Cleaning up Vision Service...');  
+        this.isInitialized = false;  
+        this.retryCount = 0;  
+        console.log('✅ Vision Service cleaned up');  
+    }  
 }
