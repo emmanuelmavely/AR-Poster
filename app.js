@@ -1,57 +1,6 @@
 import { VisionService } from './src/services/VisionService.js';  
 import { TMDbService } from './src/services/TMDbService.js';  
-
-AFRAME.registerComponent('camera-aspect-fix', {
-    init: function () {
-        const camera = this.el.getObject3D('camera');
-        const canvas = document.querySelector('canvas');
-        
-        const updateAspect = () => {
-            if (camera && canvas) {
-                const width = canvas.clientWidth;
-                const height = canvas.clientHeight;
-                
-                camera.aspect = width / height;
-                camera.updateProjectionMatrix();
-                console.log('📐 Camera aspect updated:', camera.aspect);
-            }
-        };
-        
-        window.addEventListener('resize', updateAspect);
-        setTimeout(updateAspect, 500); // Give AR.js time to initialize
-    }
-});
-
-AFRAME.registerComponent('portrait-handler', {
-    init: function () {
-        const handleOrientationChange = () => {
-            const isPortrait = window.innerHeight > window.innerWidth;
-            
-            if (isPortrait) {
-                const camera = this.el.getObject3D('camera');
-                if (camera) {
-                    camera.fov = 85; // Wider FOV for portrait
-                    camera.updateProjectionMatrix();
-                }
-                
-                // Force canvas resize after delay
-                setTimeout(() => {
-                    const sceneEl = document.querySelector('a-scene');
-                    if (sceneEl && sceneEl.renderer) {
-                        const width = window.innerWidth;
-                        const height = window.innerHeight;
-                        sceneEl.renderer.setSize(width, height, false);
-                    }
-                }, 200);
-            }
-        };
-        
-        window.addEventListener('orientationchange', handleOrientationChange);
-        window.addEventListener('resize', handleOrientationChange);
-        setTimeout(handleOrientationChange, 100);
-    }
-});
-
+  
 class FreeARMovieScanner {  
     constructor() {  
         this.visionService = new VisionService();  

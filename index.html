@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Free AR Movie Scanner</title>
     
     <!-- AR.js + A-Frame (100% Free) -->
@@ -16,7 +16,7 @@
     <!-- A-Frame AR Scene -->
     <a-scene
         vr-mode-ui="enabled: false"
-        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false; sourceWidth: 480; sourceHeight: 640; displayWidth: 480; displayHeight: 640; canvasWidth: 480; canvasHeight: 640;"
+        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false; sourceWidth:1280; sourceHeight:960; displayWidth: 1280; displayHeight: 960;"
         renderer="logarithmicDepthBuffer: true; colorManagement: true; alpha: true;"
         embedded
         gesture-detector
@@ -33,15 +33,14 @@
         <a-light type="directional" position="0 5 5" color="#ffffff" intensity="0.8"></a-light>
 
         <!-- AR Camera with proper passthrough -->
-    <a-camera 
-        id="ar-camera"
-        camera="active: true; fov: 80"
-        wasd-controls="enabled: false"
-        look-controls="enabled: true"
-        cursor="rayOrigin: mouse"
-        camera-aspect-fix
-        portrait-handler
-    ></a-camera>
+        <a-camera 
+            id="ar-camera"
+            camera="active: true"
+            wasd-controls="enabled: false"
+            look-controls="enabled: true"
+            cursor="rayOrigin: mouse"
+        ></a-camera>
+    </a-scene>
 
     <!-- UI Overlay -->
     <div class="ar-ui-overlay">
@@ -77,28 +76,6 @@
         <div class="error-message" id="error-message"></div>
     </div>
 
-    <script>
-        // Fix AR.js camera stretching - CRITICAL FIX
-        window.addEventListener('load', function() {
-            if (typeof ARjs !== 'undefined' && ARjs.Source) {
-                ARjs.Source.prototype.copyElementSizeTo = function(otherElement) {
-                    if (window.innerWidth > window.innerHeight) {
-                        // Landscape mode
-                        otherElement.style.width = this.domElement.style.width;
-                        const height = parseInt(otherElement.style.width) * 3/4;
-                        otherElement.style.height = height + 'px';
-                        otherElement.style.marginTop = ((window.innerHeight - height)/2) + 'px';
-                    } else {
-                        // Portrait mode - maintain 4:3 aspect ratio
-                        otherElement.style.height = this.domElement.style.height;
-                        const width = parseInt(otherElement.style.height) * 4/3;
-                        otherElement.style.width = width + 'px';
-                        otherElement.style.marginLeft = ((window.innerWidth - width)/2) + 'px';
-                    }
-                };
-            }
-        });
-    </script>
-
     <script type="module" src="app.js"></script>
 </body>
+</html>
