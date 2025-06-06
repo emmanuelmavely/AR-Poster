@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Free AR Movie Scanner</title>
+    <title>AR Movie Scanner</title>
     
     <!-- AR.js + A-Frame (100% Free) -->
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
@@ -46,7 +46,7 @@
     <div class="ar-ui-overlay">
         <!-- Header -->
         <div class="ar-header">
-            <div class="ar-logo">FREE AR MOVIE SCANNER</div>
+            <div class="ar-logo">AR MOVIE SCANNER</div>
             <div class="ar-status" id="ar-status">Initializing...</div>
         </div>
 
@@ -74,6 +74,19 @@
 
         <!-- Error Message -->
         <div class="error-message" id="error-message"></div>
+    </div>
+
+    <!-- Custom Permission Dialog -->
+    <div class="permission-dialog" id="permission-dialog">
+        <div class="permission-content">
+            <h3>🎥 Camera & Motion Access</h3>
+            <p>This AR experience needs access to your:</p>
+            <ul>
+                <li>Camera - to see movie posters</li>
+                <li>Motion Sensors - for AR tracking</li>
+            </ul>
+            <button class="ar-btn" id="grant-permission-btn">Enable AR Experience</button>
+        </div>
     </div>
 
     <script type="module" src="app.js"></script>

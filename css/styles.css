@@ -1,4 +1,4 @@
- * {
+* {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
@@ -91,17 +91,24 @@
 
         .ar-controls {
             position: fixed;
-            bottom: 30px;
+            bottom: max(30px, env(safe-area-inset-bottom, 30px));  /* Use greater value between 30px or safe area */
             left: 50%;
             transform: translateX(-50%);
             display: flex;
             gap: 15px;
-            z-index: 101;
+            z-index: 1001;  /* Increase z-index to be above other elements */
+            -webkit-transform: translateX(-50%);  /* Add webkit prefix */
+            transform: translateX(-50%);
             pointer-events: auto;
+            will-change: transform;  /* Optimize for performance */
+            padding-bottom: env(safe-area-inset-bottom, 0px);  /* Add padding for safe area */
+            margin-bottom: 50px;  /* Add margin to clear Chrome's address bar */
         }
 
         .ar-btn {
-            background: rgba(0, 255, 136, 0.2);
+            background: rgba(0, 0, 0, 0.6);  /* More opaque background for Safari */
+            -webkit-backdrop-filter: blur(10px);  /* Add webkit prefix */
+            backdrop-filter: blur(10px);
             border: 2px solid rgba(0, 255, 136, 0.6);
             color: #00ff88;
             padding: 12px 24px;
@@ -210,18 +217,24 @@
         /* Movie Info Cards */
         .movie-card {
             position: fixed;
-            background: rgba(0, 0, 0, 0.95);
-            backdrop-filter: blur(20px);
-            border: 2px solid #00ff88;
+            background: rgba(0, 0, 0, 0.25); /* More transparent, like the button */
+            backdrop-filter: blur(15px) saturate(120%);
+            -webkit-backdrop-filter: blur(15px) saturate(120%);
+            border: 2px solid rgba(0, 255, 136, 0.25); /* Subtle border like button */
             border-radius: 15px;
             padding: 20px;
             max-width: 320px;
             min-width: 280px;
             z-index: 200;
-            box-shadow: 0 15px 50px rgba(0, 255, 136, 0.4);
+            box-shadow: 
+                0 4px 30px rgba(0, 255, 136, 0.15),
+                0 1.5px 8px rgba(0,0,0,0.18),
+                inset 0 1px 1px rgba(255, 255, 255, 0.08);
             animation: cardSlideIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
             pointer-events: auto;
             transform: translateX(-50%) translateY(-50%);
+            color: #fff;
+            transition: background 0.3s, box-shadow 0.3s;
         }
 
         @keyframes cardSlideIn {
@@ -284,6 +297,13 @@
             line-height: 1.2;
         }
 
+        .movie-genres {
+            font-size: 12px;
+            color: rgba(0, 255, 136, 0.8);  /* Match the theme green color */
+            margin: 8px 0;
+            font-weight: 500;
+        }
+
         .movie-meta {
             font-size: 13px;
             margin-bottom: 8px;
@@ -306,16 +326,24 @@
             bottom: 100px;
             left: 20px;
             right: 20px;
-            background: rgba(255, 0, 0, 0.9);
+            background: rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(15px) saturate(120%);
+            -webkit-backdrop-filter: blur(15px) saturate(120%);
+            border: 2px solid rgba(255, 59, 48, 0.25);
             color: white;
-            padding: 15px;
-            border-radius: 8px;
+            padding: 15px 20px;
+            border-radius: 15px;
             text-align: center;
             z-index: 300;
             opacity: 0;
             transform: translateY(20px);
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
             pointer-events: auto;
+            font-size: 14px;
+            box-shadow: 
+                0 4px 30px rgba(255, 59, 48, 0.15),
+                0 1.5px 8px rgba(0,0,0,0.18),
+                inset 0 1px 1px rgba(255, 255, 255, 0.08);
         }
 
         .error-message.show {
@@ -374,7 +402,9 @@
             }
             
             .ar-controls {
-                bottom: 50px; /* Account for iOS home indicator */
+                bottom: env(safe-area-inset-bottom, 50px);  /* Use safe area for modern iOS */
+                transform: translate3d(-50%, 0, 0);  /* Use translate3d for Safari */
+                -webkit-transform: translate3d(-50%, 0, 0);
             }
         }
 
@@ -383,4 +413,66 @@
             .ar-controls {
                 bottom: 40px;
             }
+        }
+
+        .permission-dialog {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+        }
+
+        .permission-content {
+            background: rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(15px) saturate(120%);
+            -webkit-backdrop-filter: blur(15px) saturate(120%);
+            border: 2px solid rgba(0, 255, 136, 0.25);
+            border-radius: 15px;
+            padding: 25px;
+            max-width: 320px;
+            text-align: center;
+            box-shadow: 
+                0 4px 30px rgba(0, 255, 136, 0.15),
+                0 1.5px 8px rgba(0,0,0,0.18),
+                inset 0 1px 1px rgba(255, 255, 255, 0.08);
+        }
+
+        .permission-content h3 {
+            color: #00ff88;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .permission-content p {
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .permission-content ul {
+            list-style: none;
+            margin-bottom: 20px;
+            text-align: left;
+            padding: 0 20px;
+        }
+
+        .permission-content li {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            margin-bottom: 8px;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .permission-content li:before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #00ff88;
         }

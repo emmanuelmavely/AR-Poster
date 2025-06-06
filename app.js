@@ -358,19 +358,29 @@ create3DMovieEntity(movieData, markerId, worldPos) {
     return entity;  
 }
   
-    create2DOverlayCard(movieData, markerId) {  
-        const movieCard = document.createElement('div');  
-        movieCard.className = 'movie-card overlay-card';  
-        movieCard.id = `overlay-${markerId}`;  
-          
-        movieCard.innerHTML = `  
-            <div class="close-btn" onclick="window.arScanner.removeMarker('${markerId}')">×</div>  
-            <div class="movie-title">${movieData.title}</div>  
-            <div class="movie-meta">  
-                ${movieData.release_date?.substring(0, 4) || '?'} •   
-                ★${movieData.vote_average?.toFixed(1) || 'N/A'}/10  
-            </div>  
-            <div class="movie-overview">${movieData.overview || 'No description available.'}</div>  
+    create2DOverlayCard(movieData, markerId) {
+        const movieCard = document.createElement('div');
+        movieCard.className = 'movie-card';
+        movieCard.id = `movie-card-${markerId}`;
+        
+        // Format year and rating
+        const year = movieData.release_date?.substring(0, 4) || '?';
+        const rating = movieData.vote_average ? `★${movieData.vote_average.toFixed(1)}/10` : 'N/A';
+        
+        // Format genres - ensure we handle both genre objects and IDs
+        let genreText = 'N/A';
+        if (movieData.genres && movieData.genres.length > 0) {
+            genreText = movieData.genres.map(g => typeof g === 'object' ? g.name : g).join(' • ');
+        }
+        
+        movieCard.innerHTML = `
+            <div class="close-btn" onclick="window.arScanner.removeMarker('${markerId}')">×</div>
+            <div class="movie-title">${movieData.title}</div>
+            <div class="movie-meta">
+                ${year} • ${rating}
+            </div>
+            <div class="movie-genres">${genreText}</div>
+            <div class="movie-overview">${movieData.overview || 'No description available.'}</div>
         `;  
           
         return movieCard;  
