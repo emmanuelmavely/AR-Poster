@@ -29,60 +29,63 @@ class FreeARMovieScanner {
         this.arStatus = document.getElementById('ar-status');  
     }  
   
-    bindEvents() {  
-        this.startBtn.addEventListener('click', (e) => {  
-            e.preventDefault();  
-            e.stopPropagation();  
-            console.log('Start AR button clicked');  
-            this.toggleAR();  
-        });  
-          
-        this.startBtn.addEventListener('touchend', (e) => {  
-            e.preventDefault();  
-            e.stopPropagation();  
-            console.log('Start AR button touched');  
-            this.toggleAR();  
-        });  
-          
-        this.clearBtn.addEventListener('click', (e) => {  
-            e.preventDefault();  
-            e.stopPropagation();  
-            this.clearAllMarkers();  
-        });  
-          
-        // Screen tap for scanning - use touchend for better mobile support  
-        document.addEventListener('touchend', (event) => {  
-            if (this.isARStarted && !event.target.closest('.ar-btn, .movie-card, .close-btn')) {  
-                event.preventDefault();  
-                this.scanAtPosition(event.changedTouches[0]);  
-            }  
-        });  
-          
-        // Fallback for mouse clicks (desktop/testing)  
-        document.addEventListener('click', (event) => {  
-            if (this.isARStarted && !event.target.closest('.ar-btn, .movie-card, .close-btn')) {  
-                this.scanAtPosition(event);  
-            }  
-        });  
-  
-        // A-Frame loaded event  
-        this.arScene.addEventListener('loaded', () => {  
-            console.log('✅ A-Frame scene loaded');  
-            this.updateStatus('Ready - Tap Start AR');  
-        });  
-          
-        // Handle visibility changes  
-        document.addEventListener('visibilitychange', () => {  
-            if (document.hidden) {  
-                console.log('📱 Page hidden');  
-            } else {  
-                console.log('📱 Page visible');  
-                if (this.isARStarted) {  
-                    this.ensureCameraVisible();  
-                }  
-            }  
-        });  
-    }  
+bindEvents() {
+    this.startBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Start AR button clicked');
+        this.toggleAR();
+    });
+      
+    this.startBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Start AR button touched');
+        this.toggleAR();
+    });
+      
+    this.clearBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.clearAllMarkers();
+    });
+      
+    // Screen tap for scanning - use touchend for better mobile support  
+    document.addEventListener('touchend', (event) => {
+        if (this.isARStarted && !event.target.closest('.ar-btn, .movie-card, .close-btn')) {
+            event.preventDefault();
+            this.scanAtPosition(event.changedTouches[0]);
+        }
+    });
+      
+    // Fallback for mouse clicks (desktop/testing)  
+    document.addEventListener('click', (event) => {
+        if (this.isARStarted && !event.target.closest('.ar-btn, .movie-card, .close-btn')) {
+            this.scanAtPosition(event);
+        }
+    });
+
+    // A-Frame loaded event  
+    this.arScene.addEventListener('loaded', () => {
+        console.log('✅ A-Frame scene loaded');
+        this.updateStatus('Ready - Tap Start AR');
+    });
+      
+    // Handle visibility changes  
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            console.log('📱 Page hidden');
+        } else {
+            console.log('📱 Page visible');
+            if (this.isARStarted) {
+                this.ensureCameraVisible();
+            }
+        }
+    });
+
+    // Fix mobile UI positioning after DOM loads
+    setTimeout(() => this.fixMobileBottomUI(), 1000);
+}
   
     async init() {  
         try {  
@@ -95,6 +98,7 @@ class FreeARMovieScanner {
             console.log('✅ Vision service ready');  
               
             this.updateStatus('Ready to start AR');  
+            this.fixMobileBottomUI();
               
         } catch (error) {  
             console.error('❌ Initialization failed:', error);  
@@ -127,6 +131,7 @@ class FreeARMovieScanner {
               
             this.isARStarted = true;  
             this.updateARUI();  
+            this.fixMobileBottomUI();
             this.showInstruction();  
               
             this.updateStatus('AR Active - Point at poster and tap');  
@@ -138,38 +143,113 @@ class FreeARMovieScanner {
         }  
     }  
   
-    ensureCameraVisible() {  
-        // Make sure AR.js camera feed is visible  
-        const arjsVideo = document.querySelector('video');  
-        if (arjsVideo) {  
-            arjsVideo.style.display = 'block';  
-            arjsVideo.style.position = 'fixed';  
-            arjsVideo.style.top = '0';  
-            arjsVideo.style.left = '0';  
-            arjsVideo.style.width = '100vw';  
-            arjsVideo.style.height = '100vh';  
-            arjsVideo.style.objectFit = 'cover';  
-            arjsVideo.style.zIndex = '0';  
-            console.log('✅ Camera feed made visible');  
-        }  
-          
-        // Make sure canvas allows camera passthrough  
-        const canvas = document.querySelector('canvas');  
-        if (canvas) {  
-            canvas.style.background = 'transparent';  
-            canvas.style.zIndex = '1';  
-            console.log('✅ Canvas set to transparent');  
-        }  
-          
-        // Force AR.js to show camera  
-        setTimeout(() => {  
-            const video = document.querySelector('video');  
-            if (video && video.style.display === 'none') {  
-                video.style.display = 'block';  
-                console.log('✅ Forced camera visibility');  
-            }  
-        }, 1000);  
-    }  
+    ensureCameraVisible() {
+        // Detect Safari
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        
+        console.log('📱 Device detected:', { isSafari, isIOS });
+        
+        // Configure AR.js dynamically
+        this.configureDynamicAR();
+        
+        // Handle camera feed
+        setTimeout(() => {
+            const arjsVideo = document.querySelector('video');
+            if (arjsVideo) {
+                this.setupCameraVideo(arjsVideo, isSafari, isIOS);
+            }
+        }, 500);
+        
+        // Force visibility after AR.js loads
+        setTimeout(() => {
+            this.forceCameraVisibility(isSafari, isIOS);
+        }, 1500);
+    }
+
+    configureDynamicAR() {
+    // Get actual screen dimensions
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+    const pixelRatio = window.devicePixelRatio || 1;
+    
+    // Calculate optimal camera resolution
+    const optimalWidth = Math.min(1280, screenWidth * pixelRatio);
+    const optimalHeight = Math.min(960, screenHeight * pixelRatio);
+    
+    console.log('📐 Screen:', screenWidth, 'x', screenHeight, 'Ratio:', pixelRatio);
+    console.log('🎥 Optimal camera:', optimalWidth, 'x', optimalHeight);
+    
+    // Apply dynamic configuration to AR.js
+    if (this.arScene) {
+        this.arScene.setAttribute('arjs', 
+            `sourceType: webcam; videoTexture: true; debugUIEnabled: false; sourceWidth:${optimalWidth}; sourceHeight:${optimalHeight}; displayWidth: ${screenWidth}; displayHeight: ${screenHeight};`
+        );
+    }
+}
+
+setupCameraVideo(video, isSafari, isIOS) {
+    console.log('🎥 Setting up camera video element');
+    
+    // Base styles for all browsers
+    video.style.position = 'fixed';
+    video.style.top = '0';
+    video.style.left = '0';
+    video.style.zIndex = '0';
+    video.style.display = 'block';
+    
+    if (isSafari || isIOS) {
+        // Safari-specific video handling
+        video.style.width = '100vw';
+        video.style.height = '100vh';
+        video.style.objectFit = 'cover';
+        video.style.WebkitTransform = 'translateZ(0)'; // Force hardware acceleration
+        video.style.transform = 'translateZ(0)';
+        
+        // iOS Safari specific
+        if (isIOS) {
+            video.style.WebkitPlaysinline = true;
+            video.setAttribute('playsinline', true);
+            video.style.width = '100vw';
+            video.style.height = '100vh';
+            video.style.objectPosition = 'center center';
+        }
+    } else {
+        // Chrome/Android handling
+        video.style.width = '100vw';
+        video.style.height = '100vh';
+        video.style.objectFit = 'cover';
+    }
+    
+    console.log('✅ Camera video configured for', isSafari ? 'Safari' : 'Chrome');
+}
+
+forceCameraVisibility(isSafari, isIOS) {
+    const video = document.querySelector('video');
+    const canvas = document.querySelector('canvas');
+    
+    if (video) {
+        // Force video visibility
+        video.style.display = 'block !important';
+        video.style.visibility = 'visible !important';
+        video.style.opacity = '1 !important';
+        
+        if (isSafari) {
+            // Safari-specific force
+            video.style.WebkitAppearance = 'none';
+            video.style.backgroundColor = 'transparent';
+        }
+        
+        console.log('✅ Forced camera visibility');
+    }
+    
+    if (canvas) {
+        canvas.style.background = 'transparent';
+        canvas.style.backgroundColor = 'transparent';
+        canvas.style.zIndex = '1';
+        console.log('✅ Canvas set transparent');
+    }
+}
   
     stopAR() {  
         console.log('🛑 Stopping AR...');  
