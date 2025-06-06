@@ -22,7 +22,6 @@ class FreeARMovieScanner {
         this.arScene = document.getElementById('ar-scene');  
         this.arCamera = document.getElementById('ar-camera');  
         this.startBtn = document.getElementById('start-ar-btn');  
-        this.clearBtn = document.getElementById('clear-markers-btn');  
         this.instruction = document.getElementById('scan-instruction');  
         this.loadingOverlay = document.getElementById('loading-overlay');  
         this.errorMessage = document.getElementById('error-message');  
@@ -42,12 +41,6 @@ class FreeARMovieScanner {
             e.stopPropagation();  
             console.log('Start AR button touched');  
             this.toggleAR();  
-        });  
-          
-        this.clearBtn.addEventListener('click', (e) => {  
-            e.preventDefault();  
-            e.stopPropagation();  
-            this.clearAllMarkers();  
         });  
           
         // Screen tap for scanning - use touchend for better mobile support  
@@ -183,16 +176,14 @@ class FreeARMovieScanner {
         console.log('✅ AR stopped');  
     }  
   
-    updateARUI() {  
-        if (this.isARStarted) {  
-            this.startBtn.textContent = '🛑 Stop AR';  
-            this.startBtn.classList.add('active');  
-            this.clearBtn.style.display = 'block';  
-        } else {  
-            this.startBtn.textContent = '🚀 Start AR';  
-            this.startBtn.classList.remove('active');  
-            this.clearBtn.style.display = 'none';  
-        }  
+    updateARUI() {
+        if (this.isARStarted) {
+            this.startBtn.textContent = 'EXIT';
+            this.startBtn.classList.add('active');
+        } else {
+            this.startBtn.textContent = 'START';
+            this.startBtn.classList.remove('active');
+        }
     }  
   
     showInstruction() {  
