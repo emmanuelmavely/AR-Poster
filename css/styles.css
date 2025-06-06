@@ -31,7 +31,7 @@
             left: 0 !important;
             width: 100vw !important;
             height: 100vh !important;
-            object-fit: cover !important;
+            object-fit: contain !important;
             z-index: 0 !important;
             display: block !important;
         }
