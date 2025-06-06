@@ -367,17 +367,16 @@ create3DMovieEntity(movieData, markerId, worldPos) {
         const year = movieData.release_date?.substring(0, 4) || '?';
         const rating = movieData.vote_average ? `★${movieData.vote_average.toFixed(1)}/10` : 'N/A';
         
-        // Format genres - ensure we handle both genre objects and IDs
-        let genreText = 'N/A';
-        if (movieData.genres && movieData.genres.length > 0) {
-            genreText = movieData.genres.map(g => typeof g === 'object' ? g.name : g).join(' • ');
-        }
+        // Format runtime from minutes to hours and minutes
+        const runtime = movieData.runtime ? 
+            `${Math.floor(movieData.runtime/60)}h ${movieData.runtime%60}m` : 
+            'N/A';
         
         movieCard.innerHTML = `
-            <div class="close-btn" onclick="window.arScanner.removeMarker('${markerId}')">×</div>
+            <div class="close-btn" onclick="window.arScanner.removeMarker('${markerId}')"></div>
             <div class="movie-title">${movieData.title}</div>
             <div class="movie-meta">
-                ${year} • ${rating}
+                ${year} • ${rating} • ${runtime}
             </div>
             <div class="movie-genres">${genreText}</div>
             <div class="movie-overview">${movieData.overview || 'No description available.'}</div>

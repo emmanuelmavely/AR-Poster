@@ -160,73 +160,108 @@ function extractGenericTitle(textBlocks, fullText, fullTextAnnotation) {
     return cleanedTitle;  
 }  
   
-function identifyTitleBySpatialLogic(blocks) {  
-    if (blocks.length === 0) return null;  
-      
-    // Score blocks based on spatial characteristics  
-    const scoredBlocks = blocks.map(block => {  
-        const text = block.description.trim().toUpperCase();  
-        const vertices = block.boundingPoly?.vertices || [];  
-          
-        let score = 0;  
-          
-        // Size scoring - larger text is more likely to be a title  
-        if (vertices.length >= 4) {  
-            const height = Math.max(...vertices.map(v => v.y)) - Math.min(...vertices.map(v => v.y));  
-            const width = Math.max(...vertices.map(v => v.x)) - Math.min(...vertices.map(v => v.x));  
-            const area = height * width;  
-              
-            // Normalize area score (rough heuristic)  
-            if (area > 5000) score += 50;  
-            else if (area > 2000) score += 30;  
-            else if (area > 1000) score += 15;  
-        }  
-          
-        // Position scoring - upper portion of image more likely to contain titles  
-        if (vertices.length >= 4) {  
-            const centerY = vertices.reduce((sum, v) => sum + v.y, 0) / vertices.length;  
-            const centerX = vertices.reduce((sum, v) => sum + v.x, 0) / vertices.length;  
-              
-            // Assume image height around 500-1000px, prefer upper 40%  
-            if (centerY < 400) score += 40;  
-            else if (centerY < 600) score += 20;  
-              
-            // Slight preference for horizontally centered text  
-            // This is rough - in real implementation you'd get actual image dimensions  
-            if (centerX > 200 && centerX < 800) score += 10;  
-        }  
-          
-        // Text characteristics scoring  
-        const letterCount = (text.match(/[A-Z]/g) || []).length;  
-        const letterRatio = letterCount / text.length;  
-          
-        // Prefer text that's mostly letters  
-        if (letterRatio > 0.8) score += 30;  
-        else if (letterRatio > 0.6) score += 15;  
-          
-        // Length scoring - titles are usually 1-6 words  
-        const wordCount = text.split(/\s+/).length;  
-        if (wordCount >= 1 && wordCount <= 4) score += 25;  
-        else if (wordCount <= 6) score += 10;  
-          
-        // Avoid very short single characters unless they could be titles  
-        if (text.length === 1 && !text.match(/[A-Z]/)) score -= 20;  
-          
-        return { block, text, score };  
-    });  
-      
-    // Sort by score and try to combine adjacent high-scoring blocks  
-    scoredBlocks.sort((a, b) => b.score - a.score);  
-      
-    console.log('🏆 Top scoring text blocks:');  
-    scoredBlocks.slice(0, 5).forEach((item, i) => {  
-        console.log(`   ${i + 1}. "${item.text}" (score: ${item.score})`);  
-    });  
-      
-    // Try to find the best combination of adjacent blocks  
-    const bestCombination = findBestTextCombination(scoredBlocks);  
-      
-    return bestCombination;  
+function identifyTitleBySpatialLogic(blocks) {
+    // Score blocks based on universal characteristics
+    const scoredBlocks = blocks.map(block => {
+        const text = block.description.trim();
+        const vertices = block.boundingPoly?.vertices || [];
+        
+        // Calculate center point and size
+        const center = {
+            x: vertices.reduce((sum, v) => sum + v.x, 0) / vertices.length,
+            y: vertices.reduce((sum, v) => sum + v.y, 0) / vertices.length
+        };
+        
+        const height = vertices.length >= 4 
+            ? Math.max(...vertices.map(v => v.y)) - Math.min(...vertices.map(v => v.y))
+            : 0;
+
+        let score = 0;
+
+        // Position scoring - prefer text in upper third
+        const yScore = Math.max(0, 100 - (center.y / 5));
+        score += yScore;
+
+        // Size scoring - prefer larger text
+        score += Math.min(50, height);
+
+        // Text quality scoring - more lenient
+        const isShort = text.length <= 2;
+        const isFunctionKey = /^F\d+$/.test(text);
+        const isUIElement = /^(INSERT|DELETE|HOME|END|BACKSPACE|ENTER|TAB)$/i.test(text);
+        const isCommonWord = /^(THE|IN|ON|AT|BY|OR|AND|FOR)$/i.test(text);
+        
+        // Only penalize obvious UI elements and very short text
+        score -= isUIElement ? 100 : 0;
+        score -= isShort && isFunctionKey ? 100 : 0;
+        score -= isCommonWord ? 20 : 0;
+
+        return {
+            text,
+            score,
+            center,
+            height,
+            vertices,
+            isUIElement,
+            isFunctionKey
+        };
+    });
+
+    // Filter out UI elements and function keys before grouping
+    const filteredBlocks = scoredBlocks.filter(block => 
+        !block.isUIElement && !block.isFunctionKey && block.score > 0
+    );
+
+    // Group blocks by vertical proximity
+    const groups = [];
+    let currentGroup = [];
+    
+    for (let i = 0; i < filteredBlocks.length; i++) {
+        const current = filteredBlocks[i];
+        
+        if (currentGroup.length === 0) {
+            currentGroup.push(current);
+            continue;
+        }
+
+        const lastInGroup = currentGroup[currentGroup.length - 1];
+        const verticalGap = Math.abs(current.center.y - lastInGroup.center.y);
+        const heightThreshold = Math.max(current.height, lastInGroup.height) * 1.5;
+
+        if (verticalGap <= heightThreshold) {
+            currentGroup.push(current);
+        } else {
+            groups.push([...currentGroup]);
+            currentGroup = [current];
+        }
+    }
+    if (currentGroup.length > 0) {
+        groups.push(currentGroup);
+    }
+
+    // Score and select the best group
+    const scoredGroups = groups.map(group => {
+        const text = group.map(b => b.text).join(' ');
+        const score = group.reduce((sum, b) => sum + b.score, 0) / group.length;
+        const avgHeight = group.reduce((sum, b) => sum + b.height, 0) / group.length;
+        const avgY = group.reduce((sum, b) => sum + b.center.y, 0) / group.length;
+        
+        // Bonus for groups with 2-4 words
+        const wordCount = text.split(/\s+/).length;
+        const wordBonus = (wordCount >= 2 && wordCount <= 4) ? 50 : 0;
+        
+        return {
+            text,
+            score: score + wordBonus + (avgHeight * 2) - (avgY / 10)
+        };
+    });
+
+    // Find best scoring group
+    const bestGroup = scoredGroups.sort((a, b) => b.score - a.score)[0];
+    console.log('📊 Scored groups:', scoredGroups.map(g => `"${g.text}" (${g.score.toFixed(1)})`));
+    
+    // Simply return the highest scoring group's text without threshold check
+    return bestGroup?.text || null;
 }  
   
 function findBestTextCombination(scoredBlocks) {  
