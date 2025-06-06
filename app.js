@@ -13,13 +13,6 @@ class FreeARMovieScanner {
         this.movieMarkers = new Map();  
         this.markerIdCounter = 0;  
           
-        // Add console monitor
-        console.log = ((oldLog) => (...args) => {
-            oldLog.apply(console, args);
-            // You could also update a UI element here to show logs
-            this.updateStatus(args.join(' '));
-        })(console.log);
-    
         this.initElements();  
         this.bindEvents();  
         this.init();  
@@ -92,37 +85,23 @@ class FreeARMovieScanner {
     }  
   
     async init() {  
-        try {
-            console.log('🚀 Initializing AR Movie Scanner...');
-            
-            // Initialize Vision Service first with better error handling
-            console.log('👁️ Starting Vision Service initialization...');
-            const visionStatus = await this.visionService.init();
-            if (!visionStatus) {
-                throw new Error('Vision service initialization failed');
-            }
-            
-            // Verify Vision Service is ready
-            const status = this.visionService.getStatus();
-            if (!status.initialized) {
-                throw new Error('Vision service is not ready');
-            }
-            
-            // Set OCR ready flag only after confirmed initialization
-            this.isOCRReady = true;
-            console.log('👁️ Vision Service Status: Ready');
-            
-            // Initialize TMDb Service
-            await this.tmdbService.getApiKey();
-            console.log('🎬 TMDb Service Ready');
-            
-            this.updateStatus('Ready to scan');
-            console.log('✅ Initialization complete');
-        } catch (error) {
-            console.error('❌ Initialization failed:', error);
-            this.isOCRReady = false; // Ensure flag is false on failure
-            this.showError('Vision service not ready. Please refresh the page');
-        }
+        try {  
+            console.log('🚀 Initializing Free AR Movie Scanner...');  
+              
+            // Initialize simplified Vision service  
+            this.updateStatus('Initializing Vision API...');  
+            await this.visionService.init();  
+            this.isOCRReady = true;  
+            console.log('✅ Vision service ready');  
+              
+            this.updateStatus('Ready to start AR');  
+              
+        } catch (error) {  
+            console.error('❌ Initialization failed:', error);  
+            this.isOCRReady = false;  
+            this.showError(`Setup Error: ${error.message}`);  
+            this.updateStatus('Setup required - Check Vision API credentials');  
+        }  
     }  
   
     async toggleAR() {  
@@ -388,17 +367,19 @@ create3DMovieEntity(movieData, markerId, worldPos) {
         const year = movieData.release_date?.substring(0, 4) || '?';
         const rating = movieData.vote_average ? `★${movieData.vote_average.toFixed(1)}/10` : 'N/A';
         
-        // Format runtime from minutes to hours and minutes
-        const runtime = movieData.runtime ? 
-            `${Math.floor(movieData.runtime/60)}h ${movieData.runtime%60}m` : 
-            'N/A';
+        // Format genres - ensure we handle both genre objects and IDs
+        let genreText = 'N/A';
+        if (movieData.genres && movieData.genres.length > 0) {
+            genreText = movieData.genres.map(g => typeof g === 'object' ? g.name : g).join(' • ');
+        }
         
         movieCard.innerHTML = `
             <div class="close-btn" onclick="window.arScanner.removeMarker('${markerId}')">×</div>
             <div class="movie-title">${movieData.title}</div>
             <div class="movie-meta">
-                ${year} • ${rating} | ${runtime}
+                ${year} • ${rating}
             </div>
+            <div class="movie-genres">${genreText}</div>
             <div class="movie-overview">${movieData.overview || 'No description available.'}</div>
         `;  
           
@@ -503,23 +484,17 @@ project3DToScreen(worldPos) {
         this.loadingOverlay.classList.remove('show');  
     }  
   
-    showError(message) {
-        console.error('❌ Error:', message);
-        if (this.errorMessage) {
-            this.errorMessage.textContent = message;
-            this.errorMessage.classList.add('show');
-            setTimeout(() => {
-                this.errorMessage.classList.remove('show');
-            }, 5000);
-        }
+    showError(message) {  
+        this.errorMessage.textContent = message;  
+        this.errorMessage.classList.add('show');  
+        setTimeout(() => {  
+            this.errorMessage.classList.remove('show');  
+        }, 5000);  
     }  
   
-    updateStatus(text) {
-        console.log('📢 Status:', text);
-        if (this.arStatus) {
-            this.arStatus.textContent = text;
-        }
-    }
+    updateStatus(text) {  
+        this.arStatus.textContent = text;  
+    }  
 }  
   
 // Initialize when page loads  

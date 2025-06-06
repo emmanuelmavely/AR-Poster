@@ -53,21 +53,64 @@ export class TMDbService {
     }
 
     async searchMovie(query) {
-        console.log('🔍 TMDb: Searching for:', query);
+        console.log('🎬 Searching for movie/TV:', `"${query}"`);
         
+        const cleanQuery = this.cleanTitle(query);
+        
+        if (!cleanQuery) {
+            console.log('❌ Empty query after cleaning');
+            return null;
+        }
+
         try {
             const apiKey = await this.getApiKey();
-            console.log('🔑 TMDb: Using API key:', apiKey ? 'Valid' : 'Missing');
+            await this.checkRateLimit();
             
-            const response = await fetch(`${this.baseUrl}/search/movie?api_key=${apiKey}&query=${encodeURIComponent(query)}`);
-            console.log('📡 TMDb: Search response status:', response.status);
+            // Try movie search first
+            console.log('🎭 Trying movie search...');
+            let searchUrl = `${this.baseUrl}/search/movie?api_key=${apiKey}&query=${encodeURIComponent(cleanQuery)}`;
+            let response = await fetch(searchUrl);
             
-            const data = await response.json();
-            console.log('📦 TMDb: Found', data.results?.length || 0, 'results');
+            if (!response.ok) {
+                console.error('❌ TMDb API error:', response.status, response.statusText);
+                throw new Error(`TMDb API error: ${response.status}`);
+            }
+
+            let data = await response.json();
+
+            // If no movie results, try TV search
+            if (!data.results || data.results.length === 0) {
+                console.log('📺 No movies found, trying TV search...');
+                await this.checkRateLimit();
+                
+                searchUrl = `${this.baseUrl}/search/tv?api_key=${apiKey}&query=${encodeURIComponent(cleanQuery)}`;
+                response = await fetch(searchUrl);
+                
+                if (response.ok) {
+                    data = await response.json();
+                    
+                    if (data.results && data.results.length > 0) {
+                        const tvShow = data.results[0];
+                        console.log('✅ Found TV show:', tvShow.name, `(${tvShow.first_air_date?.substring(0, 4) || 'Unknown year'})`);
+                        
+                        // Convert TV show to movie-like format
+                        return this.formatTVShowAsMovie(tvShow);
+                    }
+                }
+            } else {
+                const movie = data.results[0];
+                console.log('✅ Found movie:', movie.title, `(${movie.release_date?.substring(0, 4) || 'Unknown year'})`);
+                
+                // Get additional movie details
+                const detailedMovie = await this.getMovieDetails(movie.id);
+                return detailedMovie;
+            }
+
+            console.log('❌ No results found for:', `"${cleanQuery}"`);
+            return null;
             
-            return data.results;
         } catch (error) {
-            console.error('❌ TMDb Search failed:', error);
+            console.error('❌ TMDb search failed:', error.message);
             throw error;
         }
     }

@@ -99,31 +99,6 @@ export default async function visionHandler(req, res) {
     }  
 }  
   
-export async function testVision(req, res) {
-    try {
-        // Check if Vision client is initialized
-        if (!visionClient) {
-            console.log('❌ Vision client not available');
-            return res.json({ 
-                visionConfigured: false,
-                error: 'Vision API not configured'
-            });
-        }
-
-        console.log('✅ Vision API configured and ready');
-        return res.json({ 
-            visionConfigured: true,
-            status: 'ready'
-        });
-    } catch (error) {
-        console.error('❌ Vision test failed:', error);
-        return res.json({ 
-            visionConfigured: false,
-            error: error.message
-        });
-    }
-}
-
 function extractGenericTitle(textBlocks, fullText, fullTextAnnotation) {  
     console.log('🎯 Extracting title using generic logic...');  
       

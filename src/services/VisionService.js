@@ -7,19 +7,11 @@ export class VisionService {
     }  
   
     async init() {  
-        console.log('👁️ Initializing Vision Service...');
-        this.isInitialized = false; // Reset initialization state
-    
+        console.log('👁️ Initializing Vision Service...');  
         try {  
-            // Test Vision API connectivity with timeout
-            const testResponse = await Promise.race([
-                fetch('/api/test-vision'),
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Vision API timeout')), 5000)
-                )
-            ]);
-            
-            const testResult = await testResponse.json();
+            // Test Vision API connectivity  
+            const testResponse = await fetch('/api/test-vision');  
+            const testResult = await testResponse.json();  
               
             if (!testResult.visionConfigured) {  
                 throw new Error('Google Vision API credentials not configured');  
@@ -103,8 +95,7 @@ export class VisionService {
         return {  
             initialized: this.isInitialized,  
             service: 'Google Vision API',  
-            retryCount: this.retryCount,
-            ready: this.isInitialized // Add explicit ready state
+            retryCount: this.retryCount  
         };  
     }  
   

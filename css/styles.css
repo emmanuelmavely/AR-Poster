@@ -91,30 +91,30 @@
 
         .ar-controls {
             position: fixed;
-            bottom: max(30px, env(safe-area-inset-bottom, 30px));
+            bottom: max(30px, env(safe-area-inset-bottom, 30px));  /* Use greater value between 30px or safe area */
             left: 50%;
             transform: translateX(-50%);
             display: flex;
-            z-index: 1001;
-            -webkit-transform: translateX(-50%);
+            gap: 15px;
+            z-index: 1001;  /* Increase z-index to be above other elements */
+            -webkit-transform: translateX(-50%);  /* Add webkit prefix */
             transform: translateX(-50%);
             pointer-events: auto;
-            will-change: transform;
-            padding-bottom: env(safe-area-inset-bottom, 0px);
-            margin-bottom: 50px;
+            will-change: transform;  /* Optimize for performance */
+            padding-bottom: env(safe-area-inset-bottom, 0px);  /* Add padding for safe area */
+            margin-bottom: 50px;  /* Add margin to clear Chrome's address bar */
         }
 
         .ar-btn {
-            background: rgba(0, 0, 0, 0.6);
-            -webkit-backdrop-filter: blur(10px);
+            background: rgba(0, 0, 0, 0.6);  /* More opaque background for Safari */
+            -webkit-backdrop-filter: blur(10px);  /* Add webkit prefix */
             backdrop-filter: blur(10px);
             border: 2px solid rgba(0, 255, 136, 0.6);
             color: #00ff88;
-            padding: 12px 40px;
+            padding: 12px 24px;
             border-radius: 25px;
             font-size: 14px;
-            font-weight: 200;
-            letter-spacing: 0.2em;
+            font-weight: bold;
             cursor: pointer;
             transition: all 0.3s ease;
             backdrop-filter: blur(10px);
@@ -123,7 +123,6 @@
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             user-select: none;
-            text-transform: uppercase;
         }
 
         .ar-btn:hover, .ar-btn:active {
@@ -132,10 +131,9 @@
         }
 
         .ar-btn.active {
-            background: rgba(0, 0, 0, 0.6);
-            color: #00ff88;
-            box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
-            border-color: rgba(255, 59, 48, 0.6);
+            background: #00ff88;
+            color: #000;
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.6);
         }
 
         .scan-instruction {
@@ -336,7 +334,7 @@
             padding: 15px 20px;
             border-radius: 15px;
             text-align: center;
-            z-index: 2000; /* Increased z-index to appear above controls */
+            z-index: 300;
             opacity: 0;
             transform: translateY(20px);
             transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
