@@ -1,4 +1,4 @@
-* {
+ * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
@@ -56,7 +56,7 @@
             width: 100vw;
             height: 100vh;
             z-index: 100;
-            pointer-events: auto;
+            pointer-events: none;
         }
 
         .ar-header {
@@ -89,19 +89,14 @@
             letter-spacing: 0.1em;
         }
 
-
         .ar-controls {
             position: fixed;
-            left: 0;
-            right: 0;
-            bottom: 0; /* Always 0 */
-            z-index: 10;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
             display: flex;
-            justify-content: center;
-            gap: 1rem;
-            padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); /* Increase as needed */
-            padding-top: 8px;
-            background: linear-gradient(to top, rgba(0,0,0,0.25) 60%, transparent 100%);
+            gap: 15px;
+            z-index: 101;
             pointer-events: auto;
         }
 
@@ -376,5 +371,16 @@
             .ar-ui-overlay {
                 -webkit-transform: translate3d(0,0,0);
                 transform: translate3d(0,0,0);
+            }
+            
+            .ar-controls {
+                bottom: 50px; /* Account for iOS home indicator */
+            }
+        }
+
+        /* Android Chrome specific fixes */
+        @media screen and (-webkit-min-device-pixel-ratio: 1) and (orientation: portrait) {
+            .ar-controls {
+                bottom: 40px;
             }
         }
