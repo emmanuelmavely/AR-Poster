@@ -75,6 +75,11 @@ class FreeARMovieScanner {
                 }  
             }  
         });  
+        
+        const settingsBtn = document.getElementById('settings-btn');
+        settingsBtn.addEventListener('click', () => {
+            this.toggleSettings();
+        });
     }  
   
     async init() {  
@@ -298,37 +303,45 @@ class FreeARMovieScanner {
         console.log('✅ Placed 3D anchored marker:', movieData.title, 'at world position:', worldPosition);  
     }  
   
-    screenToWorld3D(screenX, screenY) {  
-        // Convert screen coordinates to world position using raycasting  
-          
-        // Create normalized device coordinates (-1 to +1)  
-        const mouse = {  
-            x: (screenX / window.innerWidth) * 2 - 1,  
-            y: -(screenY / window.innerHeight) * 2 + 1  
-        };  
-          
-        // Use A-Frame's camera to create a ray  
-        const camera = this.arCamera;  
-        const cameraEl = camera.object3D;  
-          
-        // Create ray from camera through screen point  
-        const raycaster = new THREE.Raycaster();  
-        raycaster.setFromCamera(mouse, cameraEl.children[0]); // Get camera component  
-          
-        // Cast ray forward and place object at specific distance  
-        const distance = 2.5; // 2.5 meters in front of camera  
-        const direction = raycaster.ray.direction.clone();  
-        const origin = raycaster.ray.origin.clone();  
-          
-        // Calculate world position  
-        const worldPosition = origin.add(direction.multiplyScalar(distance));  
-          
-        return {  
-            x: worldPosition.x,  
-            y: worldPosition.y,  
-            z: worldPosition.z  
-        };  
-    }  
+    screenToWorld3D(screenX, screenY) {
+        // Convert screen coordinates to world position using raycasting
+    
+        // Create normalized device coordinates (-1 to +1)
+        const mouse = {
+            x: (screenX / window.innerWidth) * 2 - 1,
+            y: -(screenY / window.innerHeight) * 2 + 1
+        };
+        
+        // Use A-Frame's camera to create a ray
+        const camera = this.arCamera;
+        const cameraEl = camera.object3D;
+        
+        // Create ray from camera through screen point
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, cameraEl.children[0]);
+        
+        // Reduce distance to make markers appear closer
+        const distance = 1.5; // Reduced from 2.5 to 1.5 meters
+        
+        // Get camera direction and position
+        const direction = raycaster.ray.direction.normalize();
+        const cameraPos = new THREE.Vector3();
+        cameraEl.getWorldPosition(cameraPos);
+        
+        // Calculate world position with offset
+        const worldPosition = new THREE.Vector3();
+        worldPosition.copy(cameraPos);
+        worldPosition.add(direction.multiplyScalar(distance));
+        
+        // Add slight vertical offset to improve visibility
+        worldPosition.y += 0.1; // Small upward offset
+        
+        return {
+            x: worldPosition.x,
+            y: worldPosition.y,
+            z: worldPosition.z
+        };
+    }
   
 create3DMovieEntity(movieData, markerId, worldPos) {  
     // Create A-Frame entity anchored in 3D space (OPTION 3: Invisible anchor only)  
@@ -354,98 +367,128 @@ create3DMovieEntity(movieData, markerId, worldPos) {
         movieCard.className = 'movie-card';
         movieCard.id = `movie-card-${markerId}`;
         
-        // Format year and rating
+        // Format required info (always shown)
         const year = movieData.release_date?.substring(0, 4) || '?';
-        const rating = movieData.vote_average ? `★${movieData.vote_average.toFixed(1)}/10` : 'N/A';
         
-        // Format genres - ensure we handle both genre objects and IDs
-        let genreText = 'N/A';
-        if (movieData.genres && movieData.genres.length > 0) {
-            genreText = movieData.genres.map(g => typeof g === 'object' ? g.name : g).join(' • ');
-        }
+        // Format optional info based on settings
+        const rating = movieData.vote_average ? `★${movieData.vote_average.toFixed(1)}/10` : 'N/A';
+        const runtime = movieData.runtime ? `${movieData.runtime}min` : '';
+        const genreText = movieData.genres?.join(' • ') || 'N/A';
+        const director = movieData.director || 'N/A';
+        const cast = movieData.cast?.join(', ') || 'N/A';
+        
+        // Get current settings
+        const settings = this.getSettings();
         
         movieCard.innerHTML = `
             <div class="close-btn" onclick="window.arScanner.removeMarker('${markerId}')">×</div>
-            <div class="movie-title">${movieData.title}</div>
+            <div class="movie-title">${movieData.title} (${year})</div>
             <div class="movie-meta">
-                ${year} • ${rating}
+                ${settings.showRating ? `<span class="rating">${rating}</span>` : ''}
+                ${settings.showRuntime ? `<span class="runtime">${runtime}</span>` : ''}
             </div>
-            <div class="movie-genres">${genreText}</div>
-            <div class="movie-overview">${movieData.overview || 'No description available.'}</div>
-        `;  
-          
-        return movieCard;  
+            ${settings.showGenres ? `<div class="movie-genres">${genreText}</div>` : ''}
+            ${settings.showDirector ? `<div class="movie-director">Director: ${director}</div>` : ''}
+            ${settings.showCast ? `<div class="movie-cast">Cast: ${cast}</div>` : ''}
+            ${settings.showSynopsis ? `<div class="movie-overview">${movieData.overview || 'No description available.'}</div>` : ''}
+            ${settings.showTrailer && movieData.trailer_url ? 
+                `<a href="${movieData.trailer_url}" target="_blank" class="trailer-btn">Watch Trailer</a>` : ''}
+        `;
+        
+        return movieCard;
     }  
   
-    startEntityTracking(markerId) {  
-        const marker = this.movieMarkers.get(markerId);  
-        if (!marker) return;  
-          
-        const updatePosition = () => {  
-            if (!this.movieMarkers.has(markerId)) return;  
-              
-            // FIXED: Enhanced 3D to 2D projection with Z-axis scaling  
-            const screenPos = this.project3DToScreen(marker.worldPosition);  
-            if (screenPos && screenPos.visible) {  
-                marker.movieCard.style.left = `${screenPos.x}px`;  
-                marker.movieCard.style.top = `${screenPos.y}px`;  
-                marker.movieCard.style.transform = `translate(-50%, -50%) scale(${screenPos.scale})`;  
-                marker.movieCard.style.opacity = screenPos.opacity;  
-                marker.movieCard.style.display = 'block';  
-            } else {  
-                marker.movieCard.style.display = 'none';  
-            }  
-              
-            requestAnimationFrame(updatePosition);  
-        };  
-          
-        updatePosition();  
-    }  
+    getSettings() {
+        const defaultSettings = {
+            showRating: true,
+            showRuntime: true,
+            showGenres: true,
+            showDirector: true,
+            showCast: true,
+            showSynopsis: true,
+            showTrailer: true
+        };
+        
+        try {
+            const saved = localStorage.getItem('arMovieScannerSettings');
+            return saved ? JSON.parse(saved) : defaultSettings;
+        } catch (e) {
+            return defaultSettings;
+        }
+    }
   
-project3DToScreen(worldPos) {  
-    try {  
-        // Get the AR.js camera more directly  
-        const scene = this.arScene;  
-        const camera = scene.camera;  
-          
-        if (!camera) {  
-            console.warn('⚠️ AR Camera not found');  
-            return { visible: false };  
-        }  
-          
-        // Create vector from world position  
-        const vector = new THREE.Vector3(worldPos.x, worldPos.y, worldPos.z);  
-          
-        // Get camera world position directly from AR.js  
-        const cameraPosition = new THREE.Vector3();  
-        camera.getWorldPosition(cameraPosition);  
-          
-        // Calculate actual distance  
-        const distance = cameraPosition.distanceTo(vector);  
-          
-        // Project using AR camera  
-        const projected = vector.clone().project(camera);  
-          
-        // Convert to screen coordinates  
-        const x = (projected.x * 0.5 + 0.5) * window.innerWidth;  
-        const y = (projected.y * -0.5 + 0.5) * window.innerHeight;  
-          
-        // Enhanced scaling based on distance  
-        const baseDistance = 2.5;  
-        const scale = Math.max(0.3, Math.min(1.5, baseDistance / Math.max(distance, 0.1)));  
-        const opacity = Math.max(0.4, Math.min(1.0, baseDistance / Math.max(distance, 0.1)));  
-          
-        const visible = projected.z < 1 && distance < 10;  
-          
-        console.log(`Distance: ${distance.toFixed(2)}, Scale: ${scale.toFixed(2)}`); // Debug log  
-          
-        return { x, y, scale, opacity, visible, distance };  
-          
-    } catch (error) {  
-        console.warn('⚠️ Projection error:', error);  
-        return { visible: false };  
-    }  
-}
+    saveSettings(settings) {
+        localStorage.setItem('arMovieScannerSettings', JSON.stringify(settings));
+        // Refresh all existing markers with new settings
+        this.refreshAllMarkers();
+    }
+  
+    refreshAllMarkers() {
+        this.movieMarkers.forEach((marker, markerId) => {
+            const newCard = this.create2DOverlayCard(marker.movieData, markerId);
+            marker.movieCard.replaceWith(newCard);
+            marker.movieCard = newCard;
+        });
+    }
+  
+    toggleSettings() {
+        const existing = document.getElementById('ar-settings-panel');
+        if (existing) {
+            existing.remove();
+            return;
+        }
+        
+        const settings = this.getSettings();
+        const panel = document.createElement('div');
+        panel.id = 'ar-settings-panel';
+        panel.className = 'settings-panel';
+        
+        panel.innerHTML = `
+            <h3>Display Settings</h3>
+            <div class="settings-options">
+                <label>
+                    <input type="checkbox" ${settings.showRating ? 'checked' : ''} data-setting="showRating">
+                    Show Rating
+                </label>
+                <label>
+                    <input type="checkbox" ${settings.showRuntime ? 'checked' : ''} data-setting="showRuntime">
+                    Show Runtime
+                </label>
+                <label>
+                    <input type="checkbox" ${settings.showGenres ? 'checked' : ''} data-setting="showGenres">
+                    Show Genres
+                </label>
+                <label>
+                    <input type="checkbox" ${settings.showDirector ? 'checked' : ''} data-setting="showDirector">
+                    Show Director
+                </label>
+                <label>
+                    <input type="checkbox" ${settings.showCast ? 'checked' : ''} data-setting="showCast">
+                    Show Cast
+                </label>
+                <label>
+                    <input type="checkbox" ${settings.showSynopsis ? 'checked' : ''} data-setting="showSynopsis">
+                    Show Synopsis
+                </label>
+                <label>
+                    <input type="checkbox" ${settings.showTrailer ? 'checked' : ''} data-setting="showTrailer">
+                    Show Trailer Button
+                </label>
+            </div>
+        `;
+        
+        // Add event listeners for settings changes
+        panel.addEventListener('change', (e) => {
+            const checkbox = e.target;
+            if (checkbox.dataset.setting) {
+                const settings = this.getSettings();
+                settings[checkbox.dataset.setting] = checkbox.checked;
+                this.saveSettings(settings);
+            }
+        });
+        
+        document.body.appendChild(panel);
+    }
   
     removeMarker(markerId) {  
         const marker = this.movieMarkers.get(markerId);  
@@ -486,6 +529,52 @@ project3DToScreen(worldPos) {
     updateStatus(text) {  
         this.arStatus.textContent = text;  
     }  
+  
+    startEntityTracking(markerId) {
+        const marker = this.movieMarkers.get(markerId);
+        if (!marker) return;
+
+        // Get the 3D entity and corresponding 2D card
+        const entity = marker.arEntity;
+        const card = marker.movieCard;
+
+        // Setup animation loop for tracking
+        const tick = () => {
+            if (!this.movieMarkers.has(markerId) || !this.isARStarted) return;
+
+            // Get current camera position
+            const camera = document.getElementById('ar-camera').object3D;
+            const entityPos = new THREE.Vector3();
+            
+            // Get world position of entity
+            entity.object3D.getWorldPosition(entityPos);
+            
+            // Project 3D position to 2D screen coordinates
+            entityPos.project(camera.children[0]); // camera's PerspectiveCamera
+            
+            // Convert to pixel coordinates
+            const x = (entityPos.x + 1) / 2 * window.innerWidth;
+            const y = (-entityPos.y + 1) / 2 * window.innerHeight;
+            
+            // Calculate distance for scaling
+            const distance = camera.position.distanceTo(entity.object3D.position);
+            const scale = Math.max(0.6, Math.min(1.2, 1.5 / (distance * 0.8))); // Adjusted scale factors
+            
+            // Only update if entity is in front of camera (z < 1)
+            if (entityPos.z < 1) {
+                card.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px) scale(${scale})`;
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+
+            // Continue tracking
+            requestAnimationFrame(tick);
+        };
+
+        // Start tracking loop
+        requestAnimationFrame(tick);
+    }
 }  
   
 // Initialize when page loads  
