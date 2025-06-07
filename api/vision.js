@@ -17,7 +17,8 @@ try {
     console.error('Failed to initialize Vision client:', error);  
 }  
   
-export default async function visionHandler(req, res) {  
+// Update the main handler
+export default async function visionHandler(req, res) {
     console.log('🔥 Vision API endpoint called');  
       
     if (!visionClient) {  
@@ -28,34 +29,39 @@ export default async function visionHandler(req, res) {
         });  
     }  
       
-    try {  
-        const { image } = req.body;  
-        console.log('📡 Received image data:', image ? `${image.length} bytes` : 'none');  
-          
-        if (!image) {  
-            console.log('❌ No image in request body');  
-            return res.status(400).json({  
-                success: false,  
-                error: 'No image provided'  
-            });  
-        }  
-          
-        // Decode base64 image  
-        console.log('🔄 Processing image...');  
-        const imageBuffer = Buffer.from(image, 'base64');  
-        console.log(`📏 Image size: ${imageBuffer.length} bytes`);  
-          
-        // Detect text with enhanced parameters  
-        console.log('👁️ Calling Google Vision API...');  
-        const [result] = await visionClient.documentTextDetection(imageBuffer, {  
-            imageContext: {  
-                languageHints: ['en'],  
-                textDetectionParams: {  
-                    enableTextDetectionConfidenceScore: true  
-                }  
-            }  
-        });  
-          
+    try {
+        const { image } = req.body;
+        const imageBuffer = Buffer.from(image, 'base64');
+
+        // Detect poster area first
+        const posterArea = await detectPosterArea(imageBuffer);
+        
+        // Configure Vision API request with crop hints if poster area found
+        const options = {
+            imageContext: {
+                languageHints: ['en'],
+                textDetectionParams: {
+                    enableTextDetectionConfidenceScore: true
+                }
+            }
+        };
+
+        if (posterArea) {
+            options.imageContext.cropHints = [{
+                boundingPoly: {
+                    vertices: [
+                        { x: posterArea.left, y: posterArea.top },
+                        { x: posterArea.right, y: posterArea.top },
+                        { x: posterArea.right, y: posterArea.bottom },
+                        { x: posterArea.left, y: posterArea.bottom }
+                    ]
+                }
+            }];
+        }
+
+        // Process with focused area
+        const [result] = await visionClient.documentTextDetection(imageBuffer, options);
+        
         const detections = result.textAnnotations;  
         const fullTextAnnotation = result.fullTextAnnotation;  
           
@@ -91,12 +97,12 @@ export default async function visionHandler(req, res) {
         }  
           
     } catch (error) {  
-        console.error('❌ Vision API error:', error.message);  
-        res.status(500).json({  
-            success: false,  
-            error: error.message  
-        });  
-    }  
+        console.error('❌ Vision API error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
 }  
   
 function extractGenericTitle(textBlocks, fullText, fullTextAnnotation) {  
@@ -161,139 +167,603 @@ function extractGenericTitle(textBlocks, fullText, fullTextAnnotation) {
 }  
   
 function identifyTitleBySpatialLogic(blocks) {  
-    if (blocks.length === 0) return null;  
-      
-    // Score blocks based on spatial characteristics  
+    // Get image dimensions from first block's bounding box  
+    const imageBounds = calculateImageBounds(blocks);  
+    
+    // Score blocks based on enhanced spatial characteristics  
     const scoredBlocks = blocks.map(block => {  
-        const text = block.description.trim().toUpperCase();  
+        const text = block.description.trim();  
         const vertices = block.boundingPoly?.vertices || [];  
-          
+        
+        // Calculate block metrics  
+        const metrics = calculateBlockMetrics(vertices, imageBounds);  
         let score = 0;  
-          
-        // Size scoring - larger text is more likely to be a title  
-        if (vertices.length >= 4) {  
-            const height = Math.max(...vertices.map(v => v.y)) - Math.min(...vertices.map(v => v.y));  
-            const width = Math.max(...vertices.map(v => v.x)) - Math.min(...vertices.map(v => v.x));  
-            const area = height * width;  
-              
-            // Normalize area score (rough heuristic)  
-            if (area > 5000) score += 50;  
-            else if (area > 2000) score += 30;  
-            else if (area > 1000) score += 15;  
-        }  
-          
-        // Position scoring - upper portion of image more likely to contain titles  
-        if (vertices.length >= 4) {  
-            const centerY = vertices.reduce((sum, v) => sum + v.y, 0) / vertices.length;  
-            const centerX = vertices.reduce((sum, v) => sum + v.x, 0) / vertices.length;  
-              
-            // Assume image height around 500-1000px, prefer upper 40%  
-            if (centerY < 400) score += 40;  
-            else if (centerY < 600) score += 20;  
-              
-            // Slight preference for horizontally centered text  
-            // This is rough - in real implementation you'd get actual image dimensions  
-            if (centerX > 200 && centerX < 800) score += 10;  
-        }  
-          
+  
+        // Position scoring - prefer upper third and center alignment  
+        score += scorePosition(metrics, imageBounds);  
+        
+        // Size and aspect ratio scoring  
+        score += scoreSizeAndRatio(metrics, imageBounds);  
+        
+        // Proximity scoring - group nearby blocks  
+        score += scoreProximity(vertices, blocks);  
+        
         // Text characteristics scoring  
-        const letterCount = (text.match(/[A-Z]/g) || []).length;  
-        const letterRatio = letterCount / text.length;  
-          
-        // Prefer text that's mostly letters  
-        if (letterRatio > 0.8) score += 30;  
-        else if (letterRatio > 0.6) score += 15;  
-          
-        // Length scoring - titles are usually 1-6 words  
-        const wordCount = text.split(/\s+/).length;  
-        if (wordCount >= 1 && wordCount <= 4) score += 25;  
-        else if (wordCount <= 6) score += 10;  
-          
-        // Avoid very short single characters unless they could be titles  
-        if (text.length === 1 && !text.match(/[A-Z]/)) score -= 20;  
-          
-        return { block, text, score };  
+        score += scoreTextCharacteristics(text);  
+  
+        return { block, text, metrics, score };  
     });  
-      
-    // Sort by score and try to combine adjacent high-scoring blocks  
-    scoredBlocks.sort((a, b) => b.score - a.score);  
-      
-    console.log('🏆 Top scoring text blocks:');  
-    scoredBlocks.slice(0, 5).forEach((item, i) => {  
-        console.log(`   ${i + 1}. "${item.text}" (score: ${item.score})`);  
-    });  
-      
-    // Try to find the best combination of adjacent blocks  
-    const bestCombination = findBestTextCombination(scoredBlocks);  
-      
-    return bestCombination;  
+  
+    // Group adjacent blocks by proximity and alignment  
+    const groups = groupAdjacentBlocks(scoredBlocks, imageBounds);  
+    
+    // Score groups and select best candidate  
+    const bestGroup = selectBestGroup(groups);  
+    
+    console.log('📊 Spatial Analysis Results:');  
+    console.log('Image bounds:', imageBounds);  
+    console.log('Block groups found:', groups.length);  
+    console.log('Best group score:', bestGroup?.score);  
+    
+    return bestGroup ? bestGroup.text : null;  
 }  
   
-function findBestTextCombination(scoredBlocks) {  
-    if (scoredBlocks.length === 0) return null;  
-      
-    // Start with highest scoring block  
-    let bestText = scoredBlocks[0].text;  
-    let bestScore = scoredBlocks[0].score;  
-      
-    // Try combinations of 2-4 adjacent blocks  
-    for (let i = 0; i < Math.min(scoredBlocks.length, 5); i++) {  
-        for (let j = i + 1; j < Math.min(scoredBlocks.length, i + 4); j++) {  
-            const combinedText = scoredBlocks.slice(i, j + 1)  
-                .map(item => item.text)  
-                .join(' ');  
-              
-            const combinedScore = scoredBlocks.slice(i, j + 1)  
-                .reduce((sum, item) => sum + item.score, 0) / (j - i + 1);  
-              
-            // Bonus for reasonable length combinations  
-            const wordCount = combinedText.split(/\s+/).length;  
-            let lengthBonus = 0;  
-            if (wordCount >= 2 && wordCount <= 4) lengthBonus = 20;  
-            else if (wordCount <= 6) lengthBonus = 10;  
-              
-            const finalScore = combinedScore + lengthBonus;  
-              
-            if (finalScore > bestScore) {  
-                bestText = combinedText;  
-                bestScore = finalScore;  
-            }  
-        }  
-    }  
-      
-    console.log(`🔗 Best combination: "${bestText}" (score: ${bestScore})`);  
-    return bestText;  
+function calculateImageBounds(blocks) {  
+    let minX = Infinity, minY = Infinity;  
+    let maxX = -Infinity, maxY = -Infinity;  
+    
+    blocks.forEach(block => {  
+        const vertices = block.boundingPoly?.vertices || [];  
+        vertices.forEach(v => {  
+            minX = Math.min(minX, v.x);  
+            minY = Math.min(minY, v.y);  
+            maxX = Math.max(maxX, v.x);  
+            maxY = Math.max(maxY, v.y);  
+        });  
+    });  
+    
+    return {  
+        width: maxX - minX,  
+        height: maxY - minY,  
+        centerX: (maxX + minX) / 2,  
+        centerY: (maxY + minY) / 2  
+    };  
 }  
   
-function applyGenericCleanup(text) {  
-    if (!text) return null;  
-      
-    let cleaned = text;  
-      
-    // Basic text cleanup without movie-specific knowledge  
-    cleaned = cleaned  
-        .replace(/[^\w\s\-']/g, ' ')  // Keep letters, numbers, spaces, hyphens, apostrophes  
-        .replace(/\s+/g, ' ')         // Multiple spaces to single space  
-        .trim();                      // Remove leading/trailing spaces  
-      
-    // Remove common poster junk that's not movie-specific  
-    cleaned = cleaned  
-        .replace(/^(THE\s+)?POSTER\s*/i, '')     // Remove "POSTER" prefix  
-        .replace(/\s*MOVIE\s*$/i, '')            // Remove "MOVIE" suffix  
-        .replace(/^OFFICIAL\s*/i, '')            // Remove "OFFICIAL" prefix  
-        .replace(/\s*TRAILER\s*$/i, '')          // Remove "TRAILER" suffix  
-        .replace(/\s*COMING\s+SOON\s*$/i, '')    // Remove "COMING SOON"  
-        .replace(/\s*IN\s+THEATERS\s*$/i, '')    // Remove "IN THEATERS"  
-        .trim();  
-      
-    // Final validation  
-    if (cleaned.length < 1) {  
-        console.log('⚠️ Cleaned title too short, returning null');  
-        return null;  
-    }  
-      
-    // Convert to title case for consistency  
-    cleaned = cleaned.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());  
-      
-    return cleaned;  
+function calculateBlockMetrics(vertices, imageBounds) {  
+    if (vertices.length < 4) return null;  
+    
+    // Calculate block dimensions and position  
+    const left = Math.min(...vertices.map(v => v.x));  
+    const right = Math.max(...vertices.map(v => v.x));  
+    const top = Math.min(...vertices.map(v => v.y));  
+    const bottom = Math.max(...vertices.map(v => v.y));  // Fixed line
+    
+    const width = right - left;  
+    const height = bottom - top;  
+    const centerX = (left + right) / 2;  
+    const centerY = (top + bottom) / 2;  
+    
+    // Calculate relative positions (0-1 range)  
+    const relativeX = centerX / imageBounds.width;  
+    const relativeY = centerY / imageBounds.height;  
+    
+    // Calculate aspect ratio and area  
+    const aspectRatio = width / height;  
+    const area = width * height;  
+    const relativeArea = area / (imageBounds.width * imageBounds.height);  
+    
+    return {  
+        bounds: { left, right, top, bottom },  
+        center: { x: centerX, y: centerY },  
+        relative: { x: relativeX, y: relativeY },  
+        dimensions: { width, height },  
+        aspectRatio,  
+        area,  
+        relativeArea  
+    };  
+}  
+  
+function scorePosition(metrics, imageBounds) {  
+    let score = 0;  
+    
+    // Vertical position scoring (prefer upper third)  
+    const relativeY = metrics.relative.y;  
+    if (relativeY < 0.33) score += 40;  
+    else if (relativeY < 0.5) score += 20;  
+    else score -= 10;  
+    
+    // Horizontal center alignment  
+    const relativeX = metrics.relative.x;  
+    const centerOffset = Math.abs(0.5 - relativeX);  
+    score += (1 - centerOffset) * 30; // Max 30 points for perfect centering  
+    
+    return score;  
+}  
+  
+function scoreSizeAndRatio(metrics, imageBounds) {  
+    let score = 0;  
+    
+    // Size scoring - prefer larger text but not too large  
+    const optimalRelativeArea = 0.05; // 5% of image area  
+    const areaDiff = Math.abs(metrics.relativeArea - optimalRelativeArea);  
+    score += (1 - areaDiff) * 40;  
+    
+    // Aspect ratio scoring - prefer wider than tall blocks  
+    const optimalRatio = 3; // Prefer text ~3 times wider than tall  
+    const ratioDiff = Math.abs(metrics.aspectRatio - optimalRatio);  
+    score += (1 - Math.min(ratioDiff, 1)) * 30;  
+    
+    return score;  
+}  
+  
+function scoreProximity(vertices, allBlocks) {  
+    let score = 0;  
+    const centerY = vertices.reduce((sum, v) => sum + v.y, 0) / vertices.length;  
+    
+    // Find blocks with similar vertical position  
+    const nearbyBlocks = allBlocks.filter(other => {  
+        if (other.boundingPoly === vertices) return false;  
+        const otherCenterY = other.boundingPoly.vertices.reduce((sum, v) => sum + v.y, 0) / 
+            other.boundingPoly.vertices.length;  
+        return Math.abs(centerY - otherCenterY) < 20;  
+    });  
+    
+    score += nearbyBlocks.length * 10; // Bonus for aligned blocks  
+    return score;  
+}  
+  
+function scoreTextCharacteristics(text) {  
+    let score = 0;  
+    
+    // Length scoring  
+    const words = text.split(/\s+/).length;  
+    if (words >= 1 && words <= 4) score += 25;  
+    else if (words <= 6) score += 10;  
+    
+    // Character ratio scoring  
+    const letters = (text.match(/[A-Za-z]/g) || []).length;  
+    const letterRatio = letters / text.length;  
+    score += letterRatio * 30;  
+    
+    return score;  
+}  
+
+function isKeyboardRelatedText(text) {
+    // Common keyboard-related patterns
+    const keyboardPatterns = [
+        // Function keys
+        /^F\d{1,2}$/i,
+        
+        // Common keyboard keys
+        /^(Home|End|Insert|Del|Delete|Esc|Tab|Enter|Return|Space|Backspace)$/i,
+        
+        // Keyboard rows
+        /^[QWERTYUIOP]$/i,
+        /^[ASDFGHJKL]$/i,
+        /^[ZXCVBNM]$/i,
+        
+        // Modifier keys
+        /^(Ctrl|Alt|Shift|Win|Cmd|Fn)$/i,
+        /^(Num|Scroll|Caps)\s*Lock$/i,
+        
+        // Special keys
+        /^(PrtSc|SysRq|Pause|Break|PgUp|PgDn|PriSc|ScrLk)$/i,
+        
+        // Navigation keys
+        /^(Up|Down|Left|Right|Nav)$/i,
+        
+        // Common abbreviated keys
+        /^(KB|BR|DB|DIB)$/i,
+        
+        // Single characters that are likely keyboard keys
+        /^[A-Z]$/,
+        
+        // Common keyboard labels
+        /^(OK|Cancel|Menu)$/i
+    ];
+
+    // Check if text matches any keyboard pattern
+    const isKeyboard = keyboardPatterns.some(pattern => pattern.test(text));
+
+    // Additional checks for keyboard-like patterns
+    const hasKeyboardIndicators = (
+        text.length <= 3 && /^[A-Z][0-9-]*$/.test(text) || // Like F1, A-, B2
+        /^[A-Z]{1,3}$/.test(text) || // 1-3 capital letters
+        text.includes('key') ||
+        text.includes('btn') ||
+        text.includes('button')
+    );
+
+    return isKeyboard || hasKeyboardIndicators;
+}
+
+// Add after scoreTextCharacteristics function
+function groupAdjacentBlocks(scoredBlocks, imageBounds) {
+    console.log('🔍 Grouping adjacent blocks...');
+    
+    const groups = [];
+    const processed = new Set();
+    
+    // Sort blocks by vertical position first
+    const sortedBlocks = [...scoredBlocks].sort((a, b) => 
+        a.metrics.center.y - b.metrics.center.y
+    );
+    
+    for (const block of sortedBlocks) {
+        if (processed.has(block)) continue;
+        
+        const group = {
+            blocks: [block],
+            text: block.text,
+            score: block.score,
+            metrics: block.metrics
+        };
+        
+        // Find adjacent blocks
+        for (const other of sortedBlocks) {
+            if (other === block || processed.has(other)) continue;
+            
+            if (areBlocksAdjacent(block.metrics, other.metrics, imageBounds)) {
+                group.blocks.push(other);
+                group.text += ' ' + other.text;
+                group.score += other.score;
+                processed.add(other);
+            }
+        }
+        
+        groups.push(group);
+        processed.add(block);
+    }
+    
+    console.log(`📚 Found ${groups.length} text groups`);
+    groups.forEach((g, i) => console.log(`   Group ${i + 1}: "${g.text}" (score: ${g.score})`));
+    
+    return groups;
+}
+
+function areBlocksAdjacent(metrics1, metrics2, imageBounds) {
+    // Vertical proximity threshold (adjusted for image height)
+    const verticalThreshold = imageBounds.height * 0.02; // 2% of image height
+    
+    // Horizontal overlap threshold
+    const horizontalThreshold = Math.min(
+        metrics1.dimensions.width,
+        metrics2.dimensions.width
+    ) * 0.5; // 50% of smaller width
+    
+    // Check vertical proximity
+    const verticalGap = Math.abs(
+        metrics1.center.y - metrics2.center.y
+    );
+    
+    // Check horizontal overlap
+    const horizontalGap = Math.abs(
+        metrics1.center.x - metrics2.center.x
+    );
+    
+    // Blocks must be close vertically and have some horizontal overlap
+    return verticalGap < verticalThreshold && 
+           horizontalGap < horizontalThreshold;
+}
+
+function selectBestGroup(groups) {
+    if (!groups || groups.length === 0) {
+        console.log('⚠️ No groups to select from');
+        return null;
+    }
+
+    // First pass: Try to find and combine title parts
+    const combinedGroups = combineRelatedTitleParts(groups);
+    
+    // Enhanced scoring for final group selection
+    const scoredGroups = combinedGroups.map(group => {
+        let finalScore = group.blocks.reduce((sum, block) => sum + block.score, 0);
+        const text = group.text;
+        
+        // Core scoring factors
+        const metrics = {
+            wordCount: text.split(/\s+/).length,
+            charCount: text.length,
+            isUpperCase: text === text.toUpperCase(),
+            hasArticle: /^(THE|A|AN)\s/i.test(text),
+            hasColon: text.includes(':'),
+            verticalPosition: group.blocks[0].metrics.relative.y,
+            horizontalCenter: Math.abs(0.5 - group.blocks[0].metrics.relative.x),
+            isKeyboardLike: isKeyboardRelatedText(text),
+            isTitleFormat: /^[A-Z][a-zA-Z]+([\s:-][A-Z][a-zA-Z]+)*$/.test(text)
+        };
+
+        // Enhanced scoring rules
+        if (metrics.isKeyboardLike) {
+            finalScore *= 0.01; // Severe penalty for keyboard text
+        } else {
+            // Strengthen vertical position importance
+            if (metrics.verticalPosition < 0.4) finalScore *= 4.0;  // Increased from 3.0
+            else if (metrics.verticalPosition < 0.6) finalScore *= 2.5;
+            
+            // Strengthen horizontal center importance
+            if (metrics.horizontalCenter < 0.15) finalScore *= 2.5; // Increased from 2.0
+            
+            // Title format scoring
+            if (metrics.isUpperCase) finalScore *= 1.8;            // Increased from 1.5
+            if (metrics.hasArticle) finalScore *= 1.4;            // Increased from 1.3
+            if (metrics.isTitleFormat) finalScore *= 2.2;         // Increased from 2.0
+            
+            // Word count scoring for two-word titles
+            if (metrics.wordCount === 2) finalScore *= 3.0;       // New specific bonus
+            else if (metrics.wordCount <= 4) finalScore *= 2.0;
+        }
+
+        return {
+            ...group,
+            finalScore,
+            metrics,
+            originalText: text
+        };
+    });
+
+    // Sort by final score
+    scoredGroups.sort((a, b) => b.finalScore - a.finalScore);
+    
+    // Get top candidates and check for related titles
+    const topCandidates = scoredGroups.slice(0, 2);
+    
+    // Log results
+    console.log('\n📊 Detailed Scoring Analysis:');
+    scoredGroups.forEach(group => {
+        console.log(`\nText: "${group.originalText}"`);
+        console.log(`Base score: ${group.score}`);
+        console.log(`Final score: ${group.finalScore}`);
+        console.log('Metrics:', group.metrics);
+    });
+
+    return topCandidates[0];
+}
+
+function combineRelatedTitleParts(groups) {
+    console.log('🔍 Analyzing title combinations...');
+    const combined = [...groups];
+    let changes;
+
+    do {
+        changes = false;
+        for (let i = 0; i < combined.length; i++) {
+            for (let j = i + 1; j < combined.length; j++) {
+                const group1 = combined[i];
+                const group2 = combined[j];
+
+                if (shouldCombineGroups(group1, group2)) {
+                    console.log(`✨ Combining "${group1.text}" with "${group2.text}"`);
+                    
+                    // Create combined group with enhanced metrics
+                    const combinedGroup = {
+                        blocks: [...group1.blocks, ...group2.blocks],
+                        text: `${group1.text} ${group2.text}`.replace(/\s*:\s*/g, ': '),
+                        score: group1.score + group2.score,
+                        metrics: {
+                            ...group1.metrics,
+                            center: {
+                                x: (group1.metrics.center.x + group2.metrics.center.x) / 2,
+                                y: (group1.metrics.center.y + group2.metrics.center.y) / 2
+                            },
+                            dimensions: {
+                                width: Math.max(
+                                    group2.metrics.bounds.right - group1.metrics.bounds.left,
+                                    group1.metrics.dimensions.width,
+                                    group2.metrics.dimensions.width
+                                ),
+                                height: Math.abs(
+                                    group2.metrics.bounds.bottom - group1.metrics.bounds.top
+                                )
+                            }
+                        }
+                    };
+
+                    // Replace first group with combined group and remove second
+                    combined[i] = combinedGroup;
+                    combined.splice(j, 1);
+                    changes = true;
+                    j--;
+                }
+            }
+        }
+    } while (changes);
+
+    return combined;
+}
+
+function shouldCombineGroups(group1, group2) {
+    // Get metrics for both groups
+    const verticalGap = Math.abs(group1.metrics.center.y - group2.metrics.center.y);
+    const horizontalAlignment = Math.abs(group1.metrics.center.x - group2.metrics.center.x);
+    
+    // Adjusted thresholds
+    const verticalThreshold = Math.min(
+        group1.metrics.dimensions.height * 2,
+        group2.metrics.dimensions.height * 2,
+        50 // Maximum threshold
+    );
+    
+    const horizontalThreshold = Math.max(
+        group1.metrics.dimensions.width,
+        group2.metrics.dimensions.width
+    ) * 0.5;
+
+    // Position checks
+    const isCloseVertically = verticalGap < verticalThreshold;
+    const isAlignedHorizontally = horizontalAlignment < horizontalThreshold;
+    
+    // Enhanced title pattern checks
+    return (
+        isCloseVertically &&
+        isAlignedHorizontally &&
+        (
+            // Both are uppercase single words that form a title
+            (group1.text.toUpperCase() === group1.text &&
+             group2.text.toUpperCase() === group2.text &&
+             group1.text.length > 1 &&
+             group2.text.length > 1 &&
+             !isKeyboardRelatedText(group1.text) &&
+             !isKeyboardRelatedText(group2.text)) ||
+            
+            // Title with subtitle (colon-separated)
+            (group1.text.endsWith(':') &&
+             !isKeyboardRelatedText(group2.text)) ||
+            
+            // Multi-word title starting with article
+            (/^(THE|A|AN)$/i.test(group1.text) &&
+             group2.text.toUpperCase() === group2.text)
+        )
+    );
+}
+
+function applyGenericCleanup(titleCandidate) {
+    if (!titleCandidate) return null;
+
+    // Filter and join adjacent uppercase words
+    const cleanedText = titleCandidate
+        .split(/\s+/)
+        .filter(word => {
+            // Keep words that:
+            // 1. Are longer than 1 character
+            // 2. Contain at least one letter
+            // 3. Are not keyboard-related
+            return word.length > 1 && 
+                   /[A-Za-z]/.test(word) && 
+                   !isKeyboardRelatedText(word);
+        })
+        .join(' ');
+
+    if (!cleanedText) return null;
+
+    // Additional title-specific cleanup
+    return cleanedText
+        .replace(/[^\w\s:'-]/g, '') // Remove special chars except :'-
+        .replace(/\s+/g, ' ')       // Normalize spaces
+        .trim();
+}
+
+// Add after vision client initialization
+async function detectPosterArea(imageBuffer) {
+    // Get full image dimensions
+    const [result] = await visionClient.imageProperties(imageBuffer);
+    const { width, height } = result.imagePropertiesAnnotation;
+
+    // First try to detect using text layout
+    const [textResult] = await visionClient.textDetection(imageBuffer);
+    if (!textResult.textAnnotations || textResult.textAnnotations.length === 0) {
+        console.log('⚠️ No text detected for poster area');
+        return null;
+    }
+
+    // Get all text blocks
+    const blocks = textResult.textAnnotations.slice(1);
+    
+    // Find densest text area
+    const clusters = findTextClusters(blocks);
+    const posterArea = selectBestPosterArea(clusters, { width, height });
+
+    console.log('📏 Detected poster area:', posterArea);
+    return posterArea;
+}
+
+function findTextClusters(blocks) {
+    const clusters = [];
+    const processed = new Set();
+
+    blocks.forEach(block => {
+        if (processed.has(block)) return;
+
+        const cluster = {
+            blocks: [block],
+            bounds: { ...getBounds(block) }
+        };
+
+        blocks.forEach(other => {
+            if (other === block || processed.has(other)) return;
+            if (areBlocksInSameCluster(block, other)) {
+                cluster.blocks.push(other);
+                processed.add(other);
+                expandBounds(cluster.bounds, getBounds(other));
+            }
+        });
+
+        clusters.push(cluster);
+        processed.add(block);
+    });
+
+    return clusters;
+}
+
+function selectBestPosterArea(clusters, imageDims) {
+    if (clusters.length === 0) return null;
+
+    // Score clusters based on poster-like characteristics
+    const scoredClusters = clusters.map(cluster => {
+        const bounds = cluster.bounds;
+        const width = bounds.right - bounds.left;
+        const height = bounds.bottom - bounds.top;
+        const area = width * height;
+        const aspectRatio = width / height;
+        
+        // Typical movie poster aspect ratios are around 0.66 (2:3)
+        const aspectScore = 1 - Math.abs(0.66 - aspectRatio);
+        
+        // Prefer clusters that take up reasonable amount of image
+        const relativeArea = area / (imageDims.width * imageDims.height);
+        const areaScore = relativeArea > 0.1 && relativeArea < 0.8 ? 1 : 0.2;
+        
+        // Prefer vertically oriented clusters
+        const orientationScore = height > width ? 1 : 0.3;
+        
+        // Text density score
+        const density = cluster.blocks.length / area;
+        const densityScore = Math.min(density * 10000, 1);
+
+        const totalScore = (
+            aspectScore * 0.3 +
+            areaScore * 0.3 +
+            orientationScore * 0.2 +
+            densityScore * 0.2
+        );
+
+        return {
+            ...cluster,
+            score: totalScore
+        };
+    });
+
+    // Select highest scoring cluster
+    scoredClusters.sort((a, b) => b.score - a.score);
+    return scoredClusters[0].bounds;
+}
+
+function areBlocksInSameCluster(block1, block2) {
+    const bounds1 = getBounds(block1);
+    const bounds2 = getBounds(block2);
+    
+    // Calculate distances
+    const verticalGap = Math.abs(
+        (bounds1.top + bounds1.bottom) / 2 -
+        (bounds2.top + bounds2.bottom) / 2
+    );
+    
+    const horizontalGap = Math.abs(
+        (bounds1.left + bounds1.right) / 2 -
+        (bounds2.left + bounds2.right) / 2
+    );
+
+    // Blocks should be relatively close to be in same cluster
+    const maxVerticalGap = Math.max(
+        bounds1.bottom - bounds1.top,
+        bounds2.bottom - bounds2.top
+    ) * 3;
+    
+    const maxHorizontalGap = Math.max(
+        bounds1.right - bounds1.left,
+        bounds2.right - bounds2.left
+    ) * 2;
+
+    return verticalGap < maxVerticalGap && horizontalGap < maxHorizontalGap;
 }
