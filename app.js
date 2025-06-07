@@ -26,6 +26,8 @@ class FreeARMovieScanner {
         this.loadingOverlay = document.getElementById('loading-overlay');  
         this.errorMessage = document.getElementById('error-message');  
         this.arStatus = document.getElementById('ar-status');  
+        this.permissionDialog = document.getElementById('permission-dialog');
+        this.permissionBtn = document.getElementById('grant-permission-btn');
     }  
   
     bindEvents() {  
@@ -109,27 +111,50 @@ class FreeARMovieScanner {
         try {  
             console.log('🚀 Starting AR...');  
             this.updateStatus('Starting AR...');  
-              
+  
+            // Show custom permission dialog first  
+            await this.showPermissionDialog();
+            
             // Check if OCR is ready before starting AR  
             if (!this.isOCRReady) {  
                 throw new Error('Vision service not ready. Please refresh the page.');  
-            }  
-              
+            }
+  
+            // Request camera permissions  
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'environment' }, 
+                audio: false 
+            });  
+  
             // Ensure camera feed is visible  
-            this.ensureCameraVisible();  
-              
+            this.ensureCameraVisible();
             this.isARStarted = true;  
             this.updateARUI();  
-            this.showInstruction();  
-              
+            this.showInstruction();
+            
             this.updateStatus('AR Active - Point at poster and tap');  
             console.log('✅ AR started successfully');  
               
         } catch (error) {  
             console.error('❌ AR start failed:', error);  
-            this.showError(error.message);  
+            if (error.name === 'NotAllowedError') {
+                this.showError('Camera access denied. Please allow camera access to use AR features.');
+            } else {
+                this.showError(error.message);
+            }
         }  
     }  
+  
+    showPermissionDialog() {
+        return new Promise((resolve) => {
+            this.permissionDialog.style.display = 'flex';
+            
+            this.permissionBtn.addEventListener('click', () => {
+                this.permissionDialog.style.display = 'none';
+                resolve();
+            }, { once: true });
+        });
+    }
   
     ensureCameraVisible() {  
         // Make sure AR.js camera feed is visible  
