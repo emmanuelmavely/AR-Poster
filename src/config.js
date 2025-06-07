@@ -1,14 +1,5 @@
 // config.js - Simple Configuration
 
-// Configure console logging
-const DEBUG = true; // Set to false in production
-
-if (DEBUG) {
-    console.debug = console.log;
-} else {
-    console.debug = function() {}; // Disable debug logs in production
-}
-
 let API_KEY = null;
 
 // Load API key from server

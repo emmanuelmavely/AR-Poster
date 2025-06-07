@@ -78,21 +78,15 @@ export class VisionService {
     }  
   
     async handleExtractionError(error, canvas) {  
-        console.error('❌ Vision API error:', error);
-        console.error('Stack trace:', error.stack);  // Add stack trace
-        console.error('Error details:', {
-            message: error.message,
-            name: error.name,
-            retryCount: this.retryCount
-        });
-              
+        console.error('❌ Vision API error:', error);  
+          
         if (this.retryCount < this.maxRetries) {  
             this.retryCount++;  
             console.log(`🔄 Retrying... (${this.retryCount}/${this.maxRetries})`);  
             await new Promise(resolve => setTimeout(resolve, 1000 * this.retryCount));  
             return this.extractText(canvas);  
         }  
-              
+          
         this.retryCount = 0;  
         throw new Error(`Vision API failed after ${this.maxRetries} attempts: ${error.message}`);  
     }  

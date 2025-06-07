@@ -3,7 +3,6 @@ import { CONFIG } from '../config.js';
 
 export class TMDbService {
     constructor() {
-        console.debug('🎬 Initializing TMDb Service...');
         this.baseUrl = CONFIG.TMDB.BASE_URL;
         this.imageBaseUrl = `${CONFIG.TMDB.IMAGE_BASE_URL}/${CONFIG.TMDB.IMAGE_SIZES.POSTER}`;
         this.cache = new Map();
@@ -13,11 +12,9 @@ export class TMDbService {
             maxRequestsPer10Sec: 40
         };
         this.apiKey = null;
-        console.debug('✅ TMDb Service constructor completed');
     }
     
     async getApiKey() {
-        console.debug('🔑 TMDb: Getting API key...');
         if (this.apiKey) return this.apiKey;
         
         // Try to get from CONFIG first
@@ -56,7 +53,6 @@ export class TMDbService {
     }
 
     async searchMovie(query) {
-        console.debug(`🔍 TMDb: Searching for "${query}"`);
         console.log('🎬 Searching for movie/TV:', `"${query}"`);
         
         const cleanQuery = this.cleanTitle(query);
